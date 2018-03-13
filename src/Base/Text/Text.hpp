@@ -3,378 +3,13 @@
 
 #include "../Base.hpp"
 #include "../Memory.hpp"
+#include "CodeConvert.hpp"
 
-#include <type_traits>
 #include <vector>
 #include <tuple>
 
 namespace MoeLP
 {
-	namespace Text_Internal
-	{
-		struct CodeConverterHelper
-		{
-			template<typename T1, typename T2>
-			static inline T2* UTF32ToUTF8(T1 ucs4, size_t& length)
-			{
-				const muint8 prefix[] = { 0x00, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC };
-				const muint32 codeUp[] =
-				{
-					0x80,           // U+00000000 ~ U+0000007F  
-					0x800,          // U+00000080 ~ U+000007FF  
-					0x10000,        // U+00000800 ~ U+0000FFFF  
-					0x200000,       // U+00010000 ~ U+001FFFFF  
-					0x4000000,      // U+00200000 ~ U+03FFFFFF  
-					0x80000000      // U+04000000 ~ U+7FFFFFFF 
-				};
-
-				mint i, len;
-
-				len = sizeof(codeUp) / sizeof(muint32);
-				for (i = 0; i < len; i++)
-				{
-					if (ucs4 < codeUp[i])
-						break;
-				}
-
-				if (i == len) return 0; //invalid
-
-				len = i + 1;
-				T2* temp = (T2*)cpuAllocate(sizeof(T2)*len);
-				for (; i > 0; i--)
-				{
-					temp[i] = static_cast<T2>((ucs4 & 0x3F) | 0x80);
-					ucs4 >>= 6;
-				}
-
-				temp[0] = static_cast<T2>(ucs4 | prefix[len - 1]);
-
-				length = len;
-				return temp;
-			}
-
-			template<typename T1, typename T2>
-			static inline T2 UTF8ToUTF32(const T1* utf8, size_t& length)
-			{
-				mint     i, len;
-				muint8   b;
-				T2		 ucs4;
-
-				if (utf8 == nullptr)
-				{
-					length = 0;
-					return 0;
-				}
-
-				b = *utf8++;
-				if (b < 0x80)
-				{
-					ucs4 = b;
-					return 1;
-				}
-
-				if (b < 0xC0 || b > 0xFD)
-				{
-					length = 0;
-					return 0;
-				}
-
-				if (b < 0xE0)
-				{
-					ucs4 = b & 0x1F;
-					len = 2;
-				}
-				else if (b < 0xF0)
-				{
-					ucs4 = b & 0x0F;
-					len = 3;
-				}
-				else if (b < 0xF8)
-				{
-					ucs4 = b & 7;
-					len = 4;
-				}
-				else if (b < 0xFC)
-				{
-					ucs4 = b & 3;
-					len = 5;
-				}
-				else
-				{
-					ucs4 = b & 1;
-					len = 6;
-				}
-
-				for (i = 1; i < len; i++)
-				{
-					b = *utf8++;
-					if (b < 0x80 || b > 0xBF)
-					{
-						break;
-					}
-
-					ucs4 = (ucs4 << 6) + (b & 0x3F);
-				}
-
-				if (i < len)
-				{
-					length = 0;
-					return 0;
-				}
-				else
-				{
-					length = len;
-					return ucs4;
-				}
-			}
-
-			template<typename T1, typename T2>
-			static inline T2* UTF32ToUTF16(T1 ucs4, size_t& length)
-			{
-				T2* temp;
-
-				if (ucs4 <= 0xFFFF)
-				{
-					temp = (T2*)cpuAllocate(sizeof(T2));
-					temp[0] = static_cast<T2>(ucs4);
-					length = 1;
-					return temp;
-				}
-				else if (ucs4 <= 0xEFFFF)
-				{
-					temp = (T2*)cpuAllocate(sizeof(T2)*2);
-					temp[0] = static_cast<T2>(0xD800 + (ucs4 >> 10) - 0x40);   // high 10 bits  
-					temp[1] = static_cast<T2>(0xDC00 + (ucs4 & 0x03FF));       // low 10 bits  
-					length = 2;
-					return temp;
-				}
-				else
-				{
-					length = 0;
-					return 0;
-				}
-			}
-
-			template<typename T1, typename T2>
-			static inline T2 UTF16ToUTF32(const T1* ucs2, size_t& length)
-			{
-				muint16 w1, w2;
-				T2 temp;
-				if (ucs2 == nullptr)
-				{
-					length = 0;
-					return 0;
-				}
-
-				w1 = ucs2[0];
-				if (w1 >= 0xD800 && w1 <= 0xDFFF)
-				{
-					if (w1 < 0xDC00)
-					{
-						w2 = ucs2[1];
-						if (w2 >= 0xDC00 && w2 <= 0xDFFF)
-						{
-							temp = (w2 & 0x03FF) + (((w1 & 0x03FF) + 0x40) << 10);
-							length = 2;
-							return temp;
-						}
-					}
-					length = 0;
-					return 0;
-				}
-				else
-				{
-					temp = w1;
-					length = 1;
-					return temp;
-				}
-			}
-		};
-
-		template<size_t size>	struct utf;
-		template<>				struct utf<8>  { typedef muint8  type; };
-		template<>				struct utf<16> { typedef muint16 type; };
-		template<>				struct utf<32> { typedef muint32 type; };
-
-		template <typename T, size_t size>
-		struct utfMatch
-		{
-			static const bool value =
-				(sizeof(T) == sizeof(typename utf<size>::type)) && (!std::is_pointer<T>::value);
-		};
-	}
-	
-	/**
-	 * @brief UTF-32 to UTF-8
-	 */
-	template<typename T1, typename T2>
-	typename std::enable_if<Text_Internal::utfMatch<T1, 32>::value &&
-		Text_Internal::utfMatch<T2, 8>::value, 
-		size_t>::type codeConvert(T1 ucs4, T2*& utf8)
-	{
-		size_t length = 0;
-		utf8 = Text_Internal::CodeConverterHelper::UTF32ToUTF8<T1, T2>(ucs4, length);
-		return length;
-	}
-
-	/**
-	 * @brief UTF-8 to UTF-32
-	 */
-	template<typename T1, typename T2>
-	typename std::enable_if<Text_Internal::utfMatch<T1, 8>::value &&
-		Text_Internal::utfMatch<T2, 32>::value,
-		size_t>::type codeConvert(const T1* utf8, T2& ucs4)
-	{
-		size_t length = 0;
-		ucs4 = Text_Internal::CodeConverterHelper::UTF8ToUTF32<T1, T2>(utf8, length);
-		return length;
-	}
-
-	/**
-	 * @brief UTF-32 to UTF-16
-	 */
-	template<typename T1, typename T2>
-	typename std::enable_if<Text_Internal::utfMatch<T1, 32>::value &&
-		Text_Internal::utfMatch<T2, 16>::value,
-		size_t>::type codeConvert(T1 ucs4, T2*& ucs2)
-	{
-		size_t length = 0;
-		ucs2 = Text_Internal::CodeConverterHelper::UTF32ToUTF16<T1, T2>(ucs4, length);
-		return length;
-	}
-
-	/**
-	 * @brief UTF-16 to UTF-32
-	 */
-	template<typename T1, typename T2>
-	typename std::enable_if<Text_Internal::utfMatch<T1, 16>::value &&
-		Text_Internal::utfMatch<T2, 32>::value,
-		size_t>::type codeConvert(const T1* ucs2, T2& ucs4)
-	{
-		size_t length = 0;
-		ucs4 = Text_Internal::CodeConverterHelper::UTF16ToUTF32<T1, T2>(ucs2, length);
-		return length;
-	}
-
-	/**
-	 * @brief UTF-16 to UTF-8
-	 */
-	template<typename T1, typename T2>
-	typename std::enable_if<Text_Internal::utfMatch<T1, 16>::value &&
-		Text_Internal::utfMatch<T2, 8>::value,
-		size_t>::type codeConvert(T1 ucs2, T2*& utf8)
-	{
-		size_t length = 0;
-		muint32 temp = Text_Internal::CodeConverterHelper::UTF16ToUTF32<T1, muint32>(&ucs2, length);
-		if (length != 1) return 0;
-		utf8 = Text_Internal::CodeConverterHelper::UTF32ToUTF8<muint32, T2>(temp, length);
-		return length;
-	}
-
-	/**
-	 * @brief UTF-8 to UTF-16
-	 */
-	template<typename T1, typename T2>
-	typename std::enable_if<Text_Internal::utfMatch<T1, 8>::value &&
-		Text_Internal::utfMatch<T2, 16>::value,
-		size_t>::type codeConvert(const T1* utf8, T2& ucs2)
-	{
-		size_t length = 0;
-		muint32 temp = Text_Internal::CodeConverterHelper::UTF8ToUTF32<T1, muint32>(utf8, length);
-		if (length == 0) return 0;
-		ucs2 = Text_Internal::CodeConverterHelper::UTF32ToUTF16<muint32, T2>(temp, length)[0];
-		if (length != 1) return 0;
-		return length;
-	}
-
-	/**
-	 * @brief UTF-8 string to UTF-16 string
-	 */
-	template<typename T1, typename T2>
-	typename std::enable_if<Text_Internal::utfMatch<T1, 8>::value &&
-		Text_Internal::utfMatch<T2, 16>::value,
-		size_t>::type codeConvert(T1* utf8str, T2*& ucs2str)
-	{
-		mint num, len;
-		muint32 ucs4;
-		size_t bufferSize = 20;
-		ucs2str = (T2*)cpuAllocate(sizeof(T2)*bufferSize);
-
-		if (utf8str == nullptr)
-			return 0;
-
-		num = 0;
-		while (*utf8str)
-		{
-			len = codeConvert(utf8str, ucs4);
-			if (len == 0) return 0;
-
-			utf8str += len;
-
-			T2* temp;
-			len = codeConvert(ucs4, temp);
-			if (len == 0) return 0;
-
-			if (num + len >= bufferSize)
-			{
-				bufferSize += 20;
-				T2* buf = (T2*)cpuAllocate(sizeof(T2)*bufferSize);
-				memcpy(buf, ucs2str, num * sizeof(T2));
-				cpuDeallocate(ucs2str, num * sizeof(T2));
-				ucs2str = buf;
-			}
-
-			memcpy(ucs2str + num, temp, len * sizeof(T2));
-			num += len;
-		}
-		*(ucs2str + num) = 0;
-		return num;
-	}
-
-	/**
-	 * @brief UTF-16 string to UTF-8 string
-	 */
-	template<typename T1, typename T2>
-	typename std::enable_if<Text_Internal::utfMatch<T1, 16>::value &&
-		Text_Internal::utfMatch<T2, 8>::value,
-		size_t>::type codeConvert(T1* ucs2str, T2*& utf8str)
-	{
-		mint num, len;
-		muint32 ucs4;
-		size_t bufferSize = 40;
-		utf8str = (T2*)cpuAllocate(sizeof(T2)*bufferSize);
-
-		if (ucs2str == nullptr)
-			return 0;
-
-		num = 0;
-		while (*ucs2str)
-		{
-			len = codeConvert(ucs2str, ucs4);
-			if (len == 0) return 0;
-
-			ucs2str += len;
-
-			T2* temp;
-			len = codeConvert(ucs4, temp);
-			if (len == 0) return 0;
-			
-			if (num + len >= bufferSize)
-			{
-				bufferSize += 40;
-				T2* buf = (T2*)cpuAllocate(sizeof(T2)*bufferSize);
-				memcpy(buf, utf8str, num * sizeof(T2));
-				cpuDeallocate(utf8str, num * sizeof(T2));
-				utf8str = buf;
-			}
-
-			memcpy(utf8str + num, temp, len * sizeof(T2));
-			num += len;
-		}
-		*(utf8str + num) = 0;
-		return num;
-	}
-
 	class Character
 	{
 	public:
@@ -576,9 +211,9 @@ namespace MoeLP
 			return (data.word >= c.data.word);
 		}
 
-		muint8& operator [](size_t index)
+		muint8& operator[](size_t index)
 		{
-			MOE_ASSERT(index < 2);
+			MOE_ERROR(index >= 0 && index < 2, "Character::operator[](size_t index): Argument index out of range.");
 			return data.bytes[index];
 		}
 
@@ -735,9 +370,12 @@ namespace MoeLP
 						*refCounter = 1;
 						for (size_t i = 0; *str; str++, i++)
 						{
-							size_t len = 0;
-							temp[i] = Text_Internal::CodeConverterHelper::UTF32ToUTF16<wchar_t, muint16>(*str, len)[0];
+							muint16* ucs2temp = (muint16*)cpuAllocate(sizeof(muint16) * 2);
+							muint32 ucs4temp = *str;
+							size_t len = codeConvert(ucs4temp, ucs2temp);
+							temp[i] = ucs2temp[0];
 							if (len != 1) temp[i] = 0;
+							cpuDeallocate(ucs2temp, sizeof(muint16) * 2);
 						}
 						temp[size] = 0;
 						buffer = temp;
@@ -749,9 +387,12 @@ namespace MoeLP
 						buffer = (muint16*)cpuAllocate(sizeof(muint16)*(size + 1));
 						for (size_t i = 0; *str; str++, i++)
 						{
-							size_t len = 0;
-							buffer[i] = Text_Internal::CodeConverterHelper::UTF32ToUTF16<wchar_t, muint16>(*str, len)[0];
+							muint16* ucs2temp = (muint16*)cpuAllocate(sizeof(muint16) * 2);
+							muint32 ucs4temp = *str;
+							size_t len = codeConvert(ucs4temp, ucs2temp);
+							buffer[i] = ucs2temp[0];
 							if (len != 1) buffer[i] = 0;
+							cpuDeallocate(ucs2temp, sizeof(muint16) * 2);
 						}
 						buffer[size] = 0;
 					}
@@ -795,9 +436,12 @@ namespace MoeLP
 					*refCounter = 1;
 					for (size_t i = 0; *str; str++, i++)
 					{
-						size_t len = 0;
-						temp[i] = Text_Internal::CodeConverterHelper::UTF32ToUTF16<wchar_t, muint16>(*str, len)[0];
+						muint16* ucs2temp = (muint16*)cpuAllocate(sizeof(muint16) * 2);
+						muint32 ucs4temp = *str;
+						size_t len = codeConvert(ucs4temp, ucs2temp);
+						temp[i] = ucs2temp[0];
 						if (len != 1) temp[i] = 0;
+						cpuDeallocate(ucs2temp, sizeof(muint16) * 2);
 					}
 					temp[size] = 0;
 					buffer = temp;
@@ -809,9 +453,12 @@ namespace MoeLP
 					buffer = (muint16*)cpuAllocate(sizeof(muint16)*(size + 1));
 					for (size_t i = 0; *str; str++, i++)
 					{
-						size_t len = 0;
-						buffer[i] = Text_Internal::CodeConverterHelper::UTF32ToUTF16<wchar_t, muint16>(*str, len)[0];
+						muint16* ucs2temp = (muint16*)cpuAllocate(sizeof(muint16) * 2);
+						muint32 ucs4temp = *str;
+						size_t len = codeConvert(ucs4temp, ucs2temp);
+						buffer[i] = ucs2temp[0];
 						if (len != 1) buffer[i] = 0;
+						cpuDeallocate(ucs2temp, sizeof(muint16) * 2);
 					}
 					buffer[size] = 0;
 				}
@@ -942,9 +589,12 @@ namespace MoeLP
 		 */
 		static Text fromUTF8(const char* utf8str)
 		{
-			muint16* temp;
+			mint length = getBufferLength(utf8str);
+			muint16* temp = (muint16*)cpuAllocate(sizeof(muint16)*length);
 			size_t size = codeConvert(utf8str, temp);
-			return Text(temp);
+			Text t = Text(temp);
+			cpuDeallocate(temp, sizeof(muint16)*length);
+			return t;
 		}
 
 		/**
@@ -991,13 +641,12 @@ namespace MoeLP
 			else if (sizeof(wchar_t) == 4)
 			{
 				const muint16* temp = data();
-				wchar_t* cstr = (wchar_t*)cpuAllocate(sizeof(wchar_t)*size);
+				muint32* cstr = new muint32[size];
 				for (size_t i = 0; i < size; i++)
 				{
-					size_t len = 0;
-					cstr[i] = Text_Internal::CodeConverterHelper::UTF16ToUTF32<muint16, wchar_t>(&temp[i], len);
+					size_t len = codeConvert(&temp[i], cstr[i]);
 				}
-				return cstr;
+				return (wchar_t*)cstr;
 			}
 			else
 			{

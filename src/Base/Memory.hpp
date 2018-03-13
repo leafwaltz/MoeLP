@@ -7,7 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <type_traits>
-#include <iostream>
+
 namespace MoeLP
 {
 	namespace MoeLP_Memory_Internal
