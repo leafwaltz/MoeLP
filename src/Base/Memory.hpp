@@ -349,10 +349,10 @@ namespace MoeLP
 		 * @param args: the args of the object's constructor
 		 */
 		template<class C, typename ...Args>
-		static C* construct(Args ...args)
+		static C* construct(Args&& ... args)
 		{
 			void* ptr = allocate(sizeof(C));
-			new (ptr) C(args...);
+			new (ptr) C(std::forward<Args>(args)...);
 			return static_cast<C*>(ptr);
 		}
 
