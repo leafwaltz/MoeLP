@@ -269,6 +269,7 @@ namespace MoeLP
 		length = CodeConvert_Internal::UTF32ToUTF16<muint32, T2>(temp, ucs2temp);
 		if (length != 1) return 0;
 		ucs2 = ucs2temp[0];
+		cpuDeallocate(ucs2temp, sizeof(T2));
 		return length;
 	}
 
