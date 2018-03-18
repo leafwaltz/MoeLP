@@ -277,6 +277,24 @@ namespace MoeLP
 	{
 		return a < b ? a : b;
 	}
+
+	mint atow(const char* ansi, wchar_t* buffer, mint chars)
+	{
+		#if defined MOE_MSVC
+		return MultiByteToWideChar(CP_ACP, 0, ansi, -1, buffer, (int)(buffer ? chars : 0));
+		#elif defined MOE_GCC
+		return mbstowcs(buffer, ansi, chars - 1) + 1;
+		#endif
+	}
+
+	mint wtoa(const wchar_t* wide, char* buffer, mint chars)
+	{
+		#if defined MOE_MSVC
+		return WideCharToMultiByte(CP_ACP, 0, wide, -1, buffer, (int)(buffer ? chars : 0), 0, 0);
+		#elif defined MOE_GCC
+		return wcstombs(buffer, wide, chars - 1) + 1;
+		#endif
+	}
 }
 
 #endif

@@ -7,6 +7,7 @@ namespace MoeLP
 {
 	class ITextWriter
 	{
+	protected:
 		virtual void writeText(const Text& text) = 0;
 
 	public:

@@ -38,6 +38,28 @@ namespace MoeLP
 		}
 
 		/**
+		 * @brief from a wide character
+		 * @param c: a wide character
+		 */
+		Character(wchar_t c)
+		{
+			if(sizeof(wchar_t)==2)
+				data.word = c;
+			else if (sizeof(wchar_t) == 4)
+			{
+				muint16* temp = (muint16*)cpuAllocate(sizeof(muint16)*2);
+				size_t len = codeConvert((muint32)c, temp);
+				if (len == 0)data.word = 0;
+				data.word = temp[0];
+				cpuDeallocate(temp, sizeof(muint16) * 2);
+			}
+			else
+			{
+				data.word = 0;
+			}
+		}
+
+		/**
 		 * @brief from an unicode code point
 		 * @param code: an unicode code point
 		 */
@@ -599,17 +621,16 @@ namespace MoeLP
 
 		/**
 		 * @brief create a text from an utf8 string
-		 * @param utf8str: utf8 string
-		 * @param chars: the number of characters
+		 * @param local: local string
 		 */
 		static Text fromLocal(const char* local)
 		{
-			mint length = fromLocalHelper(local, nullptr, 0);
-			wchar_t* buffer = (wchar_t*)cpuAllocate(sizeof(wchar_t)*length);
-			memset(buffer, 0, length * sizeof(*buffer));
-			fromLocalHelper(local, buffer, length);
-			Text t = buffer;
-			cpuDeallocate(buffer, sizeof(wchar_t)*length);
+			mint length = atow(local, nullptr, 0);
+			wchar_t* buf = (wchar_t*)cpuAllocate(sizeof(wchar_t)*length);
+			memset(buf, 0, length * sizeof(wchar_t));
+			atow(local, buf, length);
+			Text t = buf;
+			cpuDeallocate(buf, sizeof(wchar_t)*length);
 			return t;
 		}
 
@@ -641,10 +662,13 @@ namespace MoeLP
 			else if (sizeof(wchar_t) == 4)
 			{
 				const muint16* temp = data();
-				muint32* cstr = new muint32[size];
-				for (size_t i = 0; i < size; i++)
+				if (cstr == 0)
 				{
-					size_t len = codeConvert(&temp[i], cstr[i]);
+					cstr = new muint32[size];
+					for (size_t i = 0; i < size; i++)
+					{
+						size_t len = codeConvert(&temp[i], cstr[i]);
+					}
 				}
 				return (wchar_t*)cstr;
 			}
@@ -664,6 +688,26 @@ namespace MoeLP
 			MOE_ERROR(index >= 0 && index <= size, "Text::subText(mint index, mint count): Argument index out of range.");
 			MOE_ERROR(index + count >= 0 && index + count <= size, "Text::subText(mint index, mint count): Argument count out of range.");
 			return Text(*this, index, count);
+		}
+
+		/**
+		 * @brief return a sub text from left end of the text
+		 * @param count: the count of character from index
+		 */
+		Text left(mint count) const
+		{
+			MOE_ERROR(count >= 0 && count <= size, "Text::left(mint count): Argument count out of range.");
+			return Text(*this, 0, count);
+		}
+
+		/**
+		 * @brief return a sub text from right end of the text
+		 * @param count: the count of character from index
+		 */
+		Text right(mint count) const
+		{
+			MOE_ERROR(count >= 0 && count <= size, "Text::right(mint count): Argument count out of range.");
+			return Text(*this, size - count, count);
 		}
 
 		/**
@@ -705,6 +749,42 @@ namespace MoeLP
 			Text t = Text(temp);
 			cpuDeallocate(temp, sizeof(muint16)*(sz + 1));
 			return t;
+		}
+
+		/**
+		 * @brief return a reversed text.
+		 */
+		Text reverse()
+		{
+			muint16* temp = (muint16*)cpuAllocate(sizeof(muint16)*size + 1);
+			for (size_t i = 0; i < size; i++)
+			{
+				temp[i] = buffer[size - i - 1];
+			}
+			temp[size] = 0;
+			Text t = Text(temp);
+			cpuDeallocate(temp, sizeof(muint16)*size + 1);
+			return t;
+		}
+
+		/**
+		 * @brief return the first position the text to be found appears in the text and it's length.
+		 * @param text: the text to be found.
+		 */
+		std::pair<mint, size_t> findFirst(const Text& text)
+		{
+			return std::make_pair(KMP(c_str(), text.c_str()), text.length());
+		}
+
+		/**
+		 * @brief return the last position the text to be found appears in the text and it's length.
+		 * @param text: the text to be found.
+		 */
+		std::pair<mint, size_t> findLast(const Text& text)
+		{
+			mint index = KMP(reverse().c_str(), text.c_str());
+			if (index == -1)return std::make_pair(index, text.length());
+			return std::make_pair(size - index, text.length());
 		}
 
 		/**
@@ -1118,6 +1198,9 @@ namespace MoeLP
 
 		mutable volatile mint* refCounter;
 
+		//only used when sizeof(wchar_t)==4 to avoid memory leakage
+		mutable muint32* cstr = 0;
+
 		Text(const Text& src1, const Text& src2, mint index, mint count)
 		{
 			if (index == 0 && count == src1.size && src2.size == 0)
@@ -1164,6 +1247,9 @@ namespace MoeLP
 						cpuDeallocate(buffer, size * sizeof(muint16));
 
 					cpuDeallocate((void*)refCounter, sizeof(muint16));
+
+					if (cstr)
+						delete[] cstr;
 				}
 			}
 		}
@@ -1174,15 +1260,6 @@ namespace MoeLP
 			mint length = 0;
 			while (*buffer++)length++;
 			return length;
-		}
-
-		static mint fromLocalHelper(const char* local, wchar_t* buffer, mint chars)
-		{
-			#if defined MOE_MSVC
-			return MultiByteToWideChar(CP_ACP, 0, local, -1, buffer, (int)(buffer ? chars : 0));
-			#elif defined MOE_GCC
-			return mbstowcs(buffer, local, chars - 1) + 1;
-			#endif
 		}
 
 		static void i32tow(mint32 n, wchar_t* buffer, size_t size, mint radix)
@@ -1315,6 +1392,61 @@ namespace MoeLP
 				}
 			}
 			return indexBuffer;
+		}
+
+		/**
+		 * @breif KMP
+		 */
+		mint* getNext(const wchar_t* s, mint& len)
+		{
+			len = wcslen(s);
+			mint* next = (mint*)cpuAllocate(sizeof(mint)*len);
+			mint i = 0;
+			mint j = -1;
+			next[0] = -1;
+
+			while (i < len - 1)
+			{
+				if (j == -1 || s[i] == s[j])
+				{
+					++i;
+					++j;
+					next[i] = j;
+				}
+				else
+				{
+					j = next[j];
+				}
+			}
+			return next;
+		}
+
+		mint KMP(const wchar_t* s, const wchar_t* t)
+		{
+			mint slen, tlen;
+			mint i, j;
+			mint* next = getNext(t, tlen);
+			slen = wcslen(s);
+			i = 0;
+			j = 0;
+			while (i<slen && j<tlen)
+			{
+				if (j == -1 || s[i] == t[j])
+				{
+					++i;
+					++j;
+				}
+				else
+				{
+					j = next[j];
+				}
+			}
+
+			cpuDeallocate(next, sizeof(mint)*tlen);
+
+			if (j == tlen)
+				return i - tlen;
+			return -1;
 		}
 	};
 }
