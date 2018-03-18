@@ -684,12 +684,15 @@ namespace MoeLP
 		{
 			if (refCounter)
 			{
-				cpuDeallocate((void*)refCounter, sizeof(muint16));
-				cpuDeallocate((void*)reference, size);
+				if (ATOMIC_DECREMENT(refCounter) == 0)
+				{
+					cpuDeallocate((void*)refCounter, sizeof(muint16));
+					cpuDeallocate((void*)reference, size);
 
-				refCounter = nullptr;
-				reference = nullptr;
-				size = 0;
+					refCounter = nullptr;
+					reference = nullptr;
+					size = 0;
+				}
 			}
 		}
 
