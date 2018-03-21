@@ -35,7 +35,7 @@ namespace MoeLP
 		ITextWriter& writeLine(const Text& text)
 		{
 			write(text);
-			writeText(L"\r\n");
+			writeText(L"\n");
 			return *this;
 		}
 
@@ -43,7 +43,7 @@ namespace MoeLP
 		ITextWriter& writeLine(const Text& text, const T& n)
 		{
 			write(text.arg(n));
-			writeText(L"\r\n");
+			writeText(L"\n");
 			return *this;
 		}
 
@@ -51,7 +51,7 @@ namespace MoeLP
 		ITextWriter& writeLine(const Text& text, const T& n, const Args& ... args)
 		{
 			write(text.arg(n), args...);
-			writeText(L"\r\n");
+			writeText(L"\n");
 			return *this;
 		}
 	};
