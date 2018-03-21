@@ -66,12 +66,12 @@ namespace MoeLP
 			#elif defined MOE_GCC
 			struct stat info;
 			mint len = wtoa(fullPath.c_str(), 0, 0);
-			char* buffer = new char[len];
+			char* buffer = (char*)cpuAllocate(sizeof(char)*len);
 			memset(buffer, 0, len * sizeof(*buffer));
 			wtoa(fullPath.c_str(), buffer, (int)len);
 			int result = stat(buffer, &info);
 			if (result != 0) return false;
-			delete[] buffer;
+			cpuDeallocate(buffer, sizeof(char)*len);
 			else return S_ISREG(info.st_mode);
 			#endif
 		}
@@ -86,12 +86,12 @@ namespace MoeLP
 			#elif defined MOE_GCC
 			struct stat info;
 			mint len = wtoa(fullPath.c_str(), 0, 0);
-			char* buffer = new char[len];
+			char* buffer = (char*)cpuAllocate(sizeof(char)*len);
 			memset(buffer, 0, len * sizeof(*buffer));
 			wtoa(fullPath.c_str(), buffer, (int)len);
 			int result = stat(buffer, &info);
 			if (result != 0) return false;
-			delete[] buffer;
+			cpuDeallocate(buffer, sizeof(char)*len);
 			else return S_ISREG(info.st_mode);
 			#endif
 		}
@@ -225,7 +225,7 @@ namespace MoeLP
 
 		void init()
 		{
-			wchar_t* temp = new wchar_t[fullPath.length() + 1];
+			wchar_t* temp = (wchar_t*)cpuAllocate(sizeof(wchar_t)*(fullPath.length() + 1));
 			memcpy(temp, fullPath.c_str(), sizeof(wchar_t) * (fullPath.length() + 1));
 			for (size_t i = 0; i < fullPath.length() + 1; i++)
 			{
@@ -235,7 +235,7 @@ namespace MoeLP
 				}
 			}
 			fullPath = Text(temp);
-			delete[] temp;
+			cpuDeallocate(temp, sizeof(wchar_t)*(fullPath.length() + 1));
 
 			#if defined MOE_MSVC
 			if (fullPath != L"")
