@@ -38,7 +38,7 @@ namespace MoeLP
 			}
 
 			mint len = wtoa(fileName.c_str(), nullptr, 0);
-			char* fileName_ = new char[len];
+			char* fileName_ = (char*)cpuAllocate(sizeof(char)*len);
 			memset(fileName_, 0, len * sizeof(char));
 			wtoa(fileName.c_str(), fileName_, len);
 
@@ -48,6 +48,8 @@ namespace MoeLP
 			#elif defined MOE_GCC
 			file = fopen(fileName_, mode);
 			#endif
+
+			cpuDeallocate(fileName_, sizeof(char)*len);
 		}
 
 		~FileStream()

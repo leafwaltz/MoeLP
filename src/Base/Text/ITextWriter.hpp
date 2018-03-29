@@ -12,6 +12,10 @@ namespace MoeLP
 
 	public:
 
+		virtual ~ITextWriter()
+		{
+		}
+
 		ITextWriter& write(const Text& text)
 		{
 			writeText(text);

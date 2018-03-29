@@ -551,9 +551,19 @@ namespace MoeLP
 			realSize = size;
 			start = 0;
 			buffer = (muint16*)cpuAllocate(sizeof(muint16)*(size + 1));
-			memcpy(buffer, src1.buffer + src1.start, sizeof(muint16)*src1.size);
-			memcpy(buffer + src1.size, src2.buffer + src2.start, sizeof(muint16)*src2.size);
-			buffer[size] = 0;
+			if (size <= localSize)
+			{
+				memcpy(temp, src1.buffer + src1.start, sizeof(muint16)*src1.size);
+				memcpy(temp + src1.size, src2.buffer + src2.start, sizeof(muint16)*src2.size);
+				temp[size] = 0;
+				buffer = temp;
+			}
+			else
+			{
+				memcpy(buffer, src1.buffer + src1.start, sizeof(muint16)*src1.size);
+				memcpy(buffer + src1.size, src2.buffer + src2.start, sizeof(muint16)*src2.size);
+				buffer[size] = 0;
+			}
 		}
 
 		/**

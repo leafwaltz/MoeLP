@@ -234,6 +234,7 @@ namespace MoeLP
 					temp[i] = delimiter;
 				}
 			}
+			temp[fullPath.length()] = 0;
 			fullPath = Text(temp);
 			cpuDeallocate(temp, sizeof(wchar_t)*(fullPath.length() + 1));
 
@@ -410,7 +411,6 @@ namespace MoeLP
 			readCursor(0)
 		{
 			memset(bom, 0, 3);
-
 			FileStream fs(filePath.toText(), FileStream::ReadOnly);
 			MOE_ERROR(fs.available(), "The file is not avaliable.");
 
@@ -710,6 +710,13 @@ namespace MoeLP
 			fs.seekFromBegin(0);
 			rewriteFlag = true;
 			readCursor = 0;
+		}
+
+		bool isEnd()
+		{
+			FileStream fs(filePath.toText(), FileStream::ReadOnly);
+			MOE_ERROR(fs.available(), "The file is not avaliable.");
+			return readCursor >= fs.size();
 		}
 
 		bool exists() const

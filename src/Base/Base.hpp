@@ -250,15 +250,8 @@ namespace MoeLP
 		muint32		line() const { return line_; }
 	};
 
-	#if defined _DEBUG
 	#define MOE_ERROR(CONDITION, DESCRIPTION) do{if(!(CONDITION))throw Exception(DESCRIPTION, __FILE__, __LINE__);}while(0)
-	#else
-	#define MOE_ERROR(CONDITION, DESCRIPTION)
-	#endif
 
-	/**
-	 * algorithm
-	 */
 	#if defined max
 	#undef max
 	#endif

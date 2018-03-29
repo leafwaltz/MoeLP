@@ -12,6 +12,8 @@ namespace MoeLP
 	{
 		class Console_ : public ITextWriter
 		{
+			MOE_DISALLOW_COPY_AND_ASSIGN(Console_)
+
 			virtual void writeText(const Text& text)
 			{
 				#ifdef MOE_GCC
@@ -23,6 +25,9 @@ namespace MoeLP
 			}
 
 		public:
+			Console_()
+			{
+			}
 
 			Text readLine()
 			{
